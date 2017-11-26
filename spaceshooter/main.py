@@ -6,10 +6,6 @@ from sphere import Ship
 import cv2
  
 pygame.init()
-
-#############
-# crash_sound = pygame.mixer.Sound("crash.wav")
-#############
  
 display_width = 800
 display_height = 600
@@ -28,19 +24,13 @@ block_color = (53,115,255)
 car_width = 73
  
 gameDisplay = pygame.display.set_mode((display_width,display_height))
-pygame.display.set_caption('A bit Racey')
+pygame.display.set_caption('Spaceshooter')
 clock = pygame.time.Clock()
- 
-carImg = pygame.image.load('racecar.png')
-gameIcon = pygame.image.load('racecar.png')
-
-pygame.display.set_icon(gameIcon)
 
 pause = False
-#crash = True
 
-# sphere = Sphere(100, 100, 0, 10, 0.5)
-sphere = Ship(100, 100, 0, 10, 0.5)
+ship_one = Ship(100, 100, 0, 5, 0.1)
+ship_two = Ship(400, 400, 0, 5, 0.1)
 bullets = []
  
 def text_objects(text, font):
@@ -110,7 +100,7 @@ def game_intro():
                 
         gameDisplay.fill(white)
         largeText = pygame.font.SysFont("comicsansms",115)
-        TextSurf, TextRect = text_objects("A bit Racey", largeText)
+        TextSurf, TextRect = text_objects("Spaceshooter", largeText)
         TextRect.center = ((display_width/2),(display_height/2))
         gameDisplay.blit(TextSurf, TextRect)
 
@@ -119,85 +109,113 @@ def game_intro():
 
         pygame.display.update()
         clock.tick(15)
-    
-def game_loop():
+
+def get_actions(actions):
     global pause
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            quit()
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT:
+                actions['left'] = True
+            if event.key == pygame.K_RIGHT:
+                actions['right'] = True
+            if event.key == pygame.K_UP:
+                actions['up'] = True
+            if event.key == pygame.K_DOWN:
+                actions['down'] = True
+            if event.key == pygame.K_SPACE:
+                bullet = ship_one.fire()
+                bullets.append(bullet)
+            if event.key == pygame.K_p:
+                pause = True
+                paused()
+                
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_LEFT:
+                actions['left'] = False
+            if event.key == pygame.K_RIGHT:
+                actions['right'] = False
+            if event.key == pygame.K_UP:
+                actions['up'] = False
+            if event.key == pygame.K_DOWN:
+                actions['down'] = False
+
+    if actions['up']:
+        ship_one.accelerate()   
+    if actions['down']:
+        ship_one.deccelerate()
+    if actions['left']:
+        ship_one.rotateLeft()
+    if actions['right']:
+        ship_one.rotateRight()
+
+def game_loop():
+    global pause, ship_one, ship_two, bullets
     ############
     # pygame.mixer.music.load('jazz.wav')
     # pygame.mixer.music.play(-1)
     ############
     gameExit = False
+    
+    actions = {}
+    actions['up'] = False
+    actions['down'] = False
+    actions['left'] = False
+    actions['right'] = False
 
-    key_pressed = {}
-    key_pressed['up'] = False
-    key_pressed['down'] = False
-    key_pressed['left'] = False
-    key_pressed['right'] = False
- 
+    ship_one = Ship(100, 100, 0, 5, 0.1)
+    ship_two = Ship(400, 400, 0, 5, 0.1)
+    bullets = []
+
     while not gameExit:
- 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
- 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    key_pressed['left'] = True
-                if event.key == pygame.K_RIGHT:
-                    key_pressed['right'] = True
-                if event.key == pygame.K_UP:
-                    key_pressed['up'] = True
-                if event.key == pygame.K_DOWN:
-                    key_pressed['down'] = True
-                if event.key == pygame.K_SPACE:
-                    bullet = sphere.fire()
-                    bullets.append(bullet)
-                if event.key == pygame.K_p:
-                    pause = True
-                    paused()
-                    
-            if event.type == pygame.KEYUP:
-                if event.key == pygame.K_LEFT:
-                    key_pressed['left'] = False
-                if event.key == pygame.K_RIGHT:
-                    key_pressed['right'] = False
-                if event.key == pygame.K_UP:
-                    key_pressed['up'] = False
-                if event.key == pygame.K_DOWN:
-                    key_pressed['down'] = False
- 
-        if key_pressed['up']:
-            sphere.accelerate()
-        if key_pressed['down']:
-            sphere.deccelerate()
-        if key_pressed['left']:
-            sphere.rotateLeft()
-        if key_pressed['right']:
-            sphere.rotateRight()
-
         gameDisplay.fill(white)
-        sphere.render(gameDisplay)
+        ship_one.render(gameDisplay)
+        ship_two.render(gameDisplay)
         for bullet in bullets:
             bullet.render(gameDisplay)
 
         # convert screen to image for tensorflow
-        imgdata = pygame.surfarray.array3d(gameDisplay)
-        imgdata = imgdata.swapaxes(0,1) 
-        imgdata = cv2.cvtColor(imgdata,cv2.COLOR_RGB2BGR)
-        cv2.imshow("Test", imgdata)
-        cv2.waitKey(1)
+        game_image = pygame.surfarray.array3d(gameDisplay)
+        game_image = game_image.swapaxes(0,1) 
+        game_image = cv2.cvtColor(game_image,cv2.COLOR_RGB2BGR)
+        # cv2.imshow("Test", imgdata)
+        # cv2.waitKey(1)
 
-        for bullet in bullets:
-            bullet.tick()
+        get_actions(actions)
 
-        sphere.tick()
-        
-        
+        bullet_one = ship_one.tick(display_width, display_height, game_image)
+        bullet_two = ship_two.tick(display_width, display_height, game_image)
+
+        if bullet_one != None:
+            bullets.append(bullet_one)
+        if bullet_two != None:
+            bullets.append(bullet_two)
+
+        if ship_one.checkCollision(ship_two):
+            print('Both loose')
+            gameExit = True
+            break
+
+        for bullet in list(bullets):
+            if bullet.tick(display_width, display_height):
+                bullets.remove(bullet)
+                break
+
+            if ship_one.checkCollision(bullet):
+                print('Ship two wins!')
+                gameExit = True
+                break
+            if ship_two.checkCollision(bullet):
+                print('Ship one wins!')
+                gameExit = True
+                break
+
         pygame.display.update()
         clock.tick(60)
 
 game_intro()
-game_loop()
 pygame.quit()
 quit()
