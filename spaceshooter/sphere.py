@@ -2,14 +2,17 @@
 import math
 import pygame
 from math import sqrt
-# import learner
+from learner import DeepLearner
 
 class Sphere(object):
   def __init__(self, x, y, t, max_vel, max_acc, size, vel=0):
     self.limts = {}
+    self.limts['size'] = size 
+    self.setValues(x, y, t, max_vel, max_acc, vel)
+    
+  def setValues(self, x, y, t, max_vel, max_acc, vel=0):
     self.limts['max_vel'] = max_vel
     self.limts['max_acc'] = max_acc
-    self.limts['size'] = size
 
     self.pose = {}
     self.pose['x'] = x
@@ -95,7 +98,8 @@ class Sphere(object):
 class Ship(Sphere):
   def __init__(self, x, y, t, max_vel, max_acc, vel=0):
     Sphere.__init__(self, x, y, t, max_vel, max_acc, 20, vel)
-    self.firec = 0
+
+    self.deep_learner = DeepLearner()
 
   def fire(self):
     theta = self.pose['t']
@@ -110,32 +114,47 @@ class Ship(Sphere):
     bullet = Bullet(x, y, t, max_vel, max_acc, vel)
     return bullet
 
-  def tick(self, display_width, display_height, game_image):
-    bullet = self.act(game_image)
+  def tick(self, display_width, display_height, game_image, reward):
+    bullet = self.act(game_image, reward)
     super(Ship, self).tick(display_width, display_height)
     return bullet
 
-  def act(self, game_image):
-    actions = {}
-    actions['up']    = False
-    actions['down']  = False
-    actions['left']  = False
-    actions['right'] = False
-    actions['fire']  = self.firec % 20 == 0
-    self.firec += 1
+  def act(self, game_image,reward):
     
     #do tensorflow stuff here
+    action = self.deep_learner.get_keys_pressed(game_image,reward,reward!=0)
 
-    bullet = None
-    if actions['fire']:
-      return self.fire()
-    return bullet
+    if len(action) > 0:
+      if action[0] == pygame.K_LEFT:
+        # print('Left')
+        self.rotateLeft()
+      if action[0] == pygame.K_RIGHT:
+        # print('Right')
+        self.rotateRight()
+      if action[0] == pygame.K_UP:
+        # print('Up')
+        self.accelerate()
+      if action[0] == pygame.K_DOWN:
+        # print('Down')
+        self.deccelerate()
+      if action[0] == pygame.K_SPACE:
+        # print('Space')
+        return self.fire()
+    return None
 
   def checkCollision(self,sphere):
     if super(Ship, self).checkCollision(sphere):
       return True
     return False
 
+#############################################################
+class HumanShip(Ship):
+  def __init__(self, x, y, t, max_vel, max_acc, vel=0):
+    Ship.__init__(self, x, y, t, max_vel, max_acc, vel)
+
+  def act(self, other_ship, bullets):
+    #TODO add in human generated stratagy for the AI to learn against or from instead of a random action
+    return None
 
 #############################################################
 class Bullet(Sphere):

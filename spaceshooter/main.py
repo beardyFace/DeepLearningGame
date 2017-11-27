@@ -29,8 +29,11 @@ clock = pygame.time.Clock()
 
 pause = False
 
-ship_one = Ship(100, 100, 0, 5, 0.1)
-ship_two = Ship(400, 400, 0, 5, 0.1)
+ship_one_initial = [100, 100, 0, 5, 0.1]
+ship_one = Ship(ship_one_initial[0], ship_one_initial[1], ship_one_initial[2], ship_one_initial[3], ship_one_initial[4])
+
+ship_two_initial = [400, 400, 180, 5, 0.1]
+ship_two = Ship(ship_two_initial[0], ship_two_initial[1], ship_two_initial[2], ship_two_initial[3], ship_two_initial[4])
 bullets = []
  
 def text_objects(text, font):
@@ -97,18 +100,19 @@ def game_intro():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-                
-        gameDisplay.fill(white)
-        largeText = pygame.font.SysFont("comicsansms",115)
-        TextSurf, TextRect = text_objects("Spaceshooter", largeText)
-        TextRect.center = ((display_width/2),(display_height/2))
-        gameDisplay.blit(TextSurf, TextRect)
+          
+        game_loop()      
+        # gameDisplay.fill(white)
+        # largeText = pygame.font.SysFont("comicsansms",115)
+        # TextSurf, TextRect = text_objects("Spaceshooter", largeText)
+        # TextRect.center = ((display_width/2),(display_height/2))
+        # gameDisplay.blit(TextSurf, TextRect)
 
-        button("GO!",150,450,100,50,green,bright_green,game_loop)
-        button("Quit",550,450,100,50,red,bright_red,quitgame)
+        # button("GO!",150,450,100,50,green,bright_green,game_loop)
+        # button("Quit",550,450,100,50,red,bright_red,quitgame)
 
-        pygame.display.update()
-        clock.tick(15)
+        # pygame.display.update()
+        # clock.tick(15)
 
 def get_actions(actions):
     global pause
@@ -166,10 +170,12 @@ def game_loop():
     actions['left'] = False
     actions['right'] = False
 
-    ship_one = Ship(100, 100, 0, 5, 0.1)
-    ship_two = Ship(400, 400, 0, 5, 0.1)
+    ship_one.setValues(ship_one_initial[0], ship_one_initial[1], ship_one_initial[2], ship_one_initial[3], ship_one_initial[4])
+    ship_two.setValues(ship_two_initial[0], ship_two_initial[1], ship_two_initial[2], ship_two_initial[3], ship_two_initial[4])
     bullets = []
 
+    reward_one = 0
+    reward_two = 0
     while not gameExit:
         gameDisplay.fill(white)
         ship_one.render(gameDisplay)
@@ -184,38 +190,40 @@ def game_loop():
         # cv2.imshow("Test", imgdata)
         # cv2.waitKey(1)
 
-        get_actions(actions)
+        if ship_one.checkCollision(ship_two):
+            print('Both loose')
+            reward_one = -100
+            reward_two = -100
+            gameExit = True
+        else:
+            for bullet in list(bullets):
+                if bullet.tick(display_width, display_height):
+                    bullets.remove(bullet)
+                    break
 
-        bullet_one = ship_one.tick(display_width, display_height, game_image)
-        bullet_two = ship_two.tick(display_width, display_height, game_image)
+                if ship_one.checkCollision(bullet):
+                    reward_two = 100
+                    print('Ship two wins!')
+                    gameExit = True
+                    break
+                if ship_two.checkCollision(bullet):
+                    reward_one = 100
+                    print('Ship one wins!')
+                    gameExit = True
+                    break
+
+        bullet_one = ship_one.tick(display_width, display_height, game_image, reward_one)
+        bullet_two = ship_two.tick(display_width, display_height, game_image, reward_two)
 
         if bullet_one != None:
             bullets.append(bullet_one)
         if bullet_two != None:
             bullets.append(bullet_two)
 
-        if ship_one.checkCollision(ship_two):
-            print('Both loose')
-            gameExit = True
-            break
-
-        for bullet in list(bullets):
-            if bullet.tick(display_width, display_height):
-                bullets.remove(bullet)
-                break
-
-            if ship_one.checkCollision(bullet):
-                print('Ship two wins!')
-                gameExit = True
-                break
-            if ship_two.checkCollision(bullet):
-                print('Ship one wins!')
-                gameExit = True
-                break
-
         pygame.display.update()
-        clock.tick(60)
+        clock.tick(10)
 
 game_intro()
+# game_loop()
 pygame.quit()
 quit()
