@@ -73,8 +73,15 @@ class DeepLearner():
                                                 (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y)),
                                                  cv2.COLOR_BGR2GRAY)
 
+        # cv2.namedWindow('screen_resized_grayscaled', cv2.WINDOW_NORMAL)
+        # cv2.imshow('screen_resized_grayscaled', screen_resized_grayscaled)
+        # cv2.waitKey(1)
+        
         # set the pixels to all be 0. or 1.
         _, screen_resized_binary = cv2.threshold(screen_resized_grayscaled, 1, 255, cv2.THRESH_BINARY)
+        cv2.namedWindow('screen_resized_binary', cv2.WINDOW_NORMAL)
+        cv2.imshow('screen_resized_binary', screen_resized_binary)
+        cv2.waitKey(1)
 
         if reward != 0.0:
             self._last_scores.append(reward)
@@ -89,6 +96,7 @@ class DeepLearner():
 
         screen_resized_binary = np.reshape(screen_resized_binary,
                                                (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, 1))
+
         current_state = np.append(self._last_state[:, :, 1:], screen_resized_binary, axis=2)
 
         if not self._playback_mode:
@@ -154,8 +162,7 @@ class DeepLearner():
                 # this was a terminal frame so there is no future reward...
                 agents_expected_reward.append(rewards[i])
             else:
-                agents_expected_reward.append(
-                    rewards[i] + self.FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
+                agents_expected_reward.append(rewards[i] + self.FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
 
         # learn that these actions in these states lead to this reward
         self._session.run(self._train_operation, feed_dict={

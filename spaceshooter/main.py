@@ -102,17 +102,6 @@ def game_intro():
                 quit()
           
         game_loop()      
-        # gameDisplay.fill(white)
-        # largeText = pygame.font.SysFont("comicsansms",115)
-        # TextSurf, TextRect = text_objects("Spaceshooter", largeText)
-        # TextRect.center = ((display_width/2),(display_height/2))
-        # gameDisplay.blit(TextSurf, TextRect)
-
-        # button("GO!",150,450,100,50,green,bright_green,game_loop)
-        # button("Quit",550,450,100,50,red,bright_red,quitgame)
-
-        # pygame.display.update()
-        # clock.tick(15)
 
 def get_actions(actions):
     global pause
@@ -177,7 +166,7 @@ def game_loop():
     reward_one = 0
     reward_two = 0
     while not gameExit:
-        gameDisplay.fill(white)
+        gameDisplay.fill(black)
         ship_one.render(gameDisplay)
         ship_two.render(gameDisplay)
         for bullet in bullets:
@@ -203,20 +192,23 @@ def game_loop():
 
                 if ship_one.checkCollision(bullet):
                     reward_two = 100
+                    reward_one = -100
                     print('Ship two wins!')
                     gameExit = True
                     break
                 if ship_two.checkCollision(bullet):
                     reward_one = 100
+                    reward_two = -100
                     print('Ship one wins!')
                     gameExit = True
                     break
 
+        #TODO Thread this 
         bullet_one = ship_one.tick(display_width, display_height, game_image, reward_one)
-        bullet_two = ship_two.tick(display_width, display_height, game_image, reward_two)
-
         if bullet_one != None:
             bullets.append(bullet_one)
+
+        bullet_two = ship_two.tick(display_width, display_height, game_image, reward_two)
         if bullet_two != None:
             bullets.append(bullet_two)
 
@@ -224,6 +216,5 @@ def game_loop():
         clock.tick(10)
 
 game_intro()
-# game_loop()
 pygame.quit()
 quit()
