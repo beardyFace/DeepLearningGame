@@ -80,11 +80,7 @@ class Sphere(object):
 
   def render(self, gameDisplay):
     pygame.draw.circle(gameDisplay, (0,255,255), (int(self.pose['x']), int(self.pose['y'])), self.limts['size'])
-    pygame.draw.circle(gameDisplay, (0,0,255), (int(self.pose['x']), int(self.pose['y'])), self.limts['size']/2)
-    theta = self.pose['t']
-    x = self.pose['x'] + self.limts['size'] * math.cos(math.radians(theta))
-    y = self.pose['y'] + self.limts['size'] * math.sin(math.radians(theta))    
-    pygame.draw.line(gameDisplay, (255,0,255), [int(self.pose['x']), int(self.pose['y'])], [int(x), int(y)], 5)
+    # pygame.draw.circle(gameDisplay, (0,0,255), (int(self.pose['x']), int(self.pose['y'])), self.limts['size']/2)
 
   def checkCollision(self,sphere):
     x_diff = self.pose['x'] - sphere.pose['x']
@@ -97,7 +93,7 @@ class Sphere(object):
 #############################################################
 class Ship(Sphere):
   def __init__(self, x, y, t, max_vel, max_acc, vel=0):
-    Sphere.__init__(self, x, y, t, max_vel, max_acc, 20, vel)
+    Sphere.__init__(self, x, y, t, max_vel, max_acc, 40, vel)
 
     self.deep_learner = DeepLearner()
 
@@ -113,6 +109,13 @@ class Ship(Sphere):
     max_vel = vel
     bullet = Bullet(x, y, t, max_vel, max_acc, vel)
     return bullet
+
+  def render(self, gameDisplay):
+    super(Ship, self).render(gameDisplay)
+    theta = self.pose['t']
+    x = self.pose['x'] + (self.limts['size'] + 0) * math.cos(math.radians(theta))
+    y = self.pose['y'] + (self.limts['size'] + 0) * math.sin(math.radians(theta))    
+    pygame.draw.line(gameDisplay, (255,0,255), [int(self.pose['x']), int(self.pose['y'])], [int(x), int(y)], 10)
 
   def tick(self, display_width, display_height, game_image, reward):
     bullet = self.act(game_image, reward)
@@ -159,7 +162,7 @@ class HumanShip(Ship):
 #############################################################
 class Bullet(Sphere):
   def __init__(self, x, y, t, max_vel, max_acc, vel=0):
-    Sphere.__init__(self, x, y, t, max_vel, max_acc, 5, vel)
+    Sphere.__init__(self, x, y, t, max_vel, max_acc, 10, vel)
 
   def tick(self, display_width, display_height):
     super(Bullet, self).tick(display_width, display_height)

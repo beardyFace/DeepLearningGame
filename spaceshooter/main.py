@@ -29,10 +29,10 @@ clock = pygame.time.Clock()
 
 pause = False
 
-ship_one_initial = [100, 100, 0, 5, 0.1]
+ship_one_initial = [100, 100, 0, 5, 1]
 ship_one = Ship(ship_one_initial[0], ship_one_initial[1], ship_one_initial[2], ship_one_initial[3], ship_one_initial[4])
 
-ship_two_initial = [400, 400, 180, 5, 0.1]
+ship_two_initial = [400, 400, 225, 5, 1]
 ship_two = Ship(ship_two_initial[0], ship_two_initial[1], ship_two_initial[2], ship_two_initial[3], ship_two_initial[4])
 bullets = []
  

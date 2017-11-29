@@ -73,12 +73,12 @@ class DeepLearner():
                                                 (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y)),
                                                  cv2.COLOR_BGR2GRAY)
 
-        # cv2.namedWindow('screen_resized_grayscaled', cv2.WINDOW_NORMAL)
-        # cv2.imshow('screen_resized_grayscaled', screen_resized_grayscaled)
-        # cv2.waitKey(1)
+        cv2.namedWindow('screen_resized_grayscaled', cv2.WINDOW_NORMAL)
+        cv2.imshow('screen_resized_grayscaled', screen_resized_grayscaled)
+        cv2.waitKey(1)
         
         # set the pixels to all be 0. or 1.
-        _, screen_resized_binary = cv2.threshold(screen_resized_grayscaled, 1, 255, cv2.THRESH_BINARY)
+        _, screen_resized_binary = cv2.threshold(screen_resized_grayscaled, 170, 255, cv2.THRESH_BINARY)
         cv2.namedWindow('screen_resized_binary', cv2.WINDOW_NORMAL)
         cv2.imshow('screen_resized_binary', screen_resized_binary)
         cv2.waitKey(1)
@@ -86,7 +86,7 @@ class DeepLearner():
         if reward != 0.0:
             self._last_scores.append(reward)
             if len(self._last_scores) > self.STORE_SCORES_LEN:
-                self._last_scores.popleft()
+                self._last_scores.popleftcurrent_state()
 
         # first frame must be handled differently
         if self._last_state is None:
@@ -94,10 +94,12 @@ class DeepLearner():
             self._last_state = np.stack(tuple(screen_resized_binary for _ in range(self.STATE_FRAMES)), axis=2)
             return DeepLearner._key_presses_from_action(self._last_action)
 
-        screen_resized_binary = np.reshape(screen_resized_binary,
-                                               (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, 1))
+        screen_resized_binary = np.reshape(screen_resized_binary, (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, 1))
 
         current_state = np.append(self._last_state[:, :, 1:], screen_resized_binary, axis=2)
+        cv2.namedWindow('current state', cv2.WINDOW_NORMAL)
+        cv2.imshow('current state', current_state)
+        cv2.waitKey(1)
 
         if not self._playback_mode:
             # store the transition in previous_observations
@@ -119,14 +121,11 @@ class DeepLearner():
 
         if not self._playback_mode:
             # gradually reduce the probability of a random actionself.
-            if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROB \
-                    and len(self._observations) > self.OBSERVATION_STEPS:
-                self._probability_of_random_action -= \
-                    (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROB) / self.EXPLORE_STEPS
+            if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROB and len(self._observations) > self.OBSERVATION_STEPS:
+                self._probability_of_random_action -= (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROB) / self.EXPLORE_STEPS
+                # print("Random Chance: "+str(self._probability_of_random_action))
 
-            # print("Time: %s random_action_prob: %s reward %s scores differential %s" %
-            #       (self._time, self._probability_of_random_action, reward,
-            #        sum(self._last_scores) / self.STORE_SCORES_LEN))
+            # print("Time: %s random_action_prob: %s reward %s scores differential %s" % (self._time, self._probability_of_random_action, reward, sum(self._last_scores) / self.STORE_SCORES_LEN))
 
         return DeepLearner._key_presses_from_action(self._last_action)
 
