@@ -13,7 +13,7 @@ import cv2
 import pygame
 
 class Qnetwork():
-    def __init__(self,h_size,rnn_cell,myScope):
+    def __init__(self,h_size,num_layers,rnn_cell,myScope):
         #The network recieves a frame from the game, flattened into an array.
         #It then resizes it and processes it through four convolutional layers.
         self.scalarInput =  tf.placeholder(shape=[None,21168],dtype=tf.float32)
@@ -41,11 +41,25 @@ class Qnetwork():
         #and then returned to [batch x units] when sent through the upper levles.
         self.batch_size = tf.placeholder(dtype=tf.int32,shape=[])
         self.convFlat = tf.reshape(slim.flatten(self.conv4),[self.batch_size,self.trainLength,h_size])
-        self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
-        self.rnn,self.rnn_state = tf.nn.dynamic_rnn(\
-                inputs=self.convFlat,cell=rnn_cell,dtype=tf.float32,initial_state=self.state_in,scope=myScope+'_rnn')
-        self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
         
+        #Multi-RNN
+        # self.state_in = tf.placeholder(dtype=tf.float32, shape=[num_layers, 2, None, h_size])
+
+        # self.state_per_layer_list = tf.unstack(self.state_in, axis=0)
+
+        # self.rnn_tuple_state = tuple(
+        #     [tf.nn.rnn_cell.LSTMStateTuple(self.state_per_layer_list[idx][0], self.state_per_layer_list[idx][1])
+        #      for idx in range(num_layers)]
+        # )
+        
+        # self.rnn, self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,cell=rnn_cell,dtype=tf.float32,initial_state=self.rnn_tuple_state,scope=myScope+'_rnn')
+        # self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
+
+        # RNN
+        self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
+        self.rnn,self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,cell=rnn_cell,dtype=tf.float32,initial_state=self.state_in,scope=myScope+'_rnn')        
+        self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
+
         #The output from the recurrent player is then split into separate Value and Advantage streams
         self.streamA,self.streamV = tf.split(self.rnn,2,1)
         self.AW = tf.Variable(tf.random_normal([h_size//2,4]))
@@ -106,26 +120,35 @@ class DQRNLearner():
     UPDATE_FREQ = 5 #How often to perform a training step.
     Y = .99 #Discount factor on the target Q-values
     INITIAL_RANDOM_ACTION_PROB = 1 #Starting chance of random action
-    FINAL_RANDOM_ACTION_PROB = 0.01 #Final chance of random action
+    FINAL_RANDOM_ACTION_PROB = 0.05 #Final chance of random action
     ANNELING_STEPS = 100000 #How many steps of training to reduce startE to endE.
     PRE_TRAIN_STEPS = 10000 #How many steps of random actions before training begins.
     LOAD_MODEL = False #Whether to load a saved model.
     PATH = "./drqn" #The path to save our model to.
     H_SIZE = 512 #The size of the final convolutional layer before splitting it into Advantage and Value streams.
     
+    NUM_LAYERS = 2
     SAVE_EVERY_X_STEPS = 1000 #Number of epidoes to periodically save for analysis
     TAU = 0.001
 
     def __init__(self, scope, checkpoint_path="deep_qrnn_spaceshooter_networks", playback_mode=False, verbose_logging=False):
         tf.reset_default_graph()
         #We define the cells for the primary and target q-networks
+        # self.cell = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
+        # self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell] * DQRNLearner.NUM_LAYERS, state_is_tuple=True)
+
+        # self.cellT = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
+        # self.cellT = tf.nn.rnn_cell.MultiRNNCell([self.cellT] * DQRNLearner.NUM_LAYERS, state_is_tuple=True)
+
+        # self.state = np.zeros((DQRNLearner.NUM_LAYERS, 2, DQRNLearner.BATCH_SIZE, DQRNLearner.H_SIZE))
+
         self.cell = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
         self.cellT = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
         
-        self.mainQN = Qnetwork(DQRNLearner.H_SIZE,self.cell,scope+'_main')
-        self.targetQN = Qnetwork(DQRNLearner.H_SIZE,self.cellT,scope+'_target')
-
         self.state = (np.zeros([1,DQRNLearner.H_SIZE]),np.zeros([1,DQRNLearner.H_SIZE])) #Reset the recurrent layer's hidden state
+
+        self.mainQN   = Qnetwork(DQRNLearner.H_SIZE,DQRNLearner.NUM_LAYERS,self.cell,scope+'_main')
+        self.targetQN = Qnetwork(DQRNLearner.H_SIZE,DQRNLearner.NUM_LAYERS,self.cellT,scope+'_target')
 
         self.trainables = tf.trainable_variables()
         self.targetOps = self.updateTargetGraph(self.trainables,DQRNLearner.TAU)
@@ -186,18 +209,21 @@ class DQRNLearner():
                 print (self.episodes,self.total_steps,np.mean(self.rList[-summary_length:]), self.random_action_prob)
             
             h_size = DQRNLearner.H_SIZE
-            self.state = (np.zeros([1,h_size]),np.zeros([1,h_size])) #Reset the recurrent layer's hidden state
+
+            #Reset the recurrent layer's hidden state
+            self.state = (np.zeros([1,h_size]),np.zeros([1,h_size])) 
+            # self.state = np.zeros((DQRNLearner.NUM_LAYERS, 2, DQRNLearner.BATCH_SIZE, DQRNLearner.H_SIZE))
+
             self.last_action = None
             self.game_state = None
             self.episode_buffer = []
             self.rAll = 0
             return None
+        
+        # (2, 2, 4, 512)
+        # shape = self.state.shape
+        # print(shape)
 
-        # action = np.random.randint(0,4)
-        # if np.random.rand(1) < self.random_action_prob or self.total_steps < DQRNLearner.PRE_TRAIN_STEPS:
-        #     state1 = self.session.run(self.mainQN.rnn_state,\
-        #         feed_dict={self.mainQN.scalarInput:[game_state/255.0],self.mainQN.trainLength:1,self.mainQN.state_in:self.state,self.mainQN.batch_size:1})
-        # else:
         t = [self.random_action_prob]
         q_out, action, state1 = self.session.run([self.mainQN.Q_dist, self.mainQN.predict, self.mainQN.rnn_state],\
                 feed_dict={self.mainQN.scalarInput:[game_state/255.0],self.mainQN.trainLength:1,self.mainQN.state_in:self.state,self.mainQN.batch_size:1,self.mainQN.Temp:t})
@@ -239,7 +265,8 @@ class DQRNLearner():
                 self.updateTarget(self.targetOps)
                 #Reset the recurrent layer's hidden state
                 state_train = (np.zeros([batch_size,h_size]),np.zeros([batch_size,h_size])) 
-                
+                # state_train = np.zeros((DQRNLearner.NUM_LAYERS, 2, DQRNLearner.BATCH_SIZE, DQRNLearner.H_SIZE))
+
                 trainBatch = self.myBuffer.sample(DQRNLearner.BATCH_SIZE,DQRNLearner.TRACE_LENGTH) #Get a random batch of experiences.
                 #Below we perform the Double-DQN update to the target Q-values
                 Q1 = self.session.run(self.mainQN.predict,feed_dict={\

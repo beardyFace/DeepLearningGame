@@ -10,8 +10,8 @@ import cv2
  
 pygame.init()
  
-display_width = 800
-display_height = 800
+display_width = 1100
+display_height = 1100
  
 black = (0,0,0)
 white = (255,255,255)
@@ -28,13 +28,13 @@ clock = pygame.time.Clock()
 
 pause = False
 
-ship_one_initial = [100, 100]
+ship_one_initial = [0, 0]
 ship_one = Ship(0, ship_one_initial[0], ship_one_initial[1], (255,0,0))
 
 bullets = []
 
 max_ammo_boxes = 10
-max_mine_boxes = 4
+max_mine_boxes = 5
 ammo_boxes = []
 mine_boxes = []
  
@@ -98,7 +98,6 @@ def game_intro():
 
     while intro:
         for event in pygame.event.get():
-            #print(event)
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
@@ -107,49 +106,47 @@ def game_intro():
 
 def game_loop():
     global pause, ship_one, ship_two
-    ############
-    # pygame.mixer.music.load('jazz.wav')
-    # pygame.mixer.music.play(-1)
-    ############
+    
     gameExit = False
     
-    actions = {}
-    actions['up'] = False
-    actions['down'] = False
-    actions['left'] = False
-    actions['right'] = False
-    #x y t 5 1
-    # ship_one_initial = [100, 100, 0, 5, 1]
-    
+    grid_x = display_width/100 - 3
+    grid_y = display_height/100 - 3
+
+    def drawWalls(game_display):
+        pygame.draw.rect(game_display,(255,255,255),(0,0,display_width,100))
+        pygame.draw.rect(game_display,(255,255,255),(0,0,100,display_height))
+        pygame.draw.rect(game_display,(255,255,255),(display_width-100,0,100,display_height))
+        pygame.draw.rect(game_display,(255,255,255),(0,display_height-100,display_width,100))
+
     def set_new_pose():
-        ship_one_initial[0] = randint(80, display_width - 20)
-        ship_one_initial[1] = randint(80, display_height - 20)
+        ship_one_initial[0] = randint(0, grid_x) * 100 + 100
+        ship_one_initial[1] = randint(0, grid_y) * 100 + 100
 
         ship_one.setValues(ship_one_initial[0], ship_one_initial[1])
 
     def create_new_box():
         box = None
         while box == None or ship_one.checkCollision(box):
-            b_x = randint(80, display_width - 20)
-            b_y = randint(80, display_height - 20)
+            b_x = randint(0, grid_x) * 100 + 100
+            b_y = randint(0, grid_y) * 100 + 100
+            
             box = AmmoBox(b_x, b_y)
         return box
 
     def create_new_mine():
         box = None
         while box == None or ship_one.checkCollision(box):
-            b_x = randint(80, display_width - 20)
-            b_y = randint(80, display_height - 20)
+            b_x = randint(0, grid_x) * 100 + 100
+            b_y = randint(0, grid_y) * 100 + 100
             box = Mine(b_x, b_y)
         return box
 
-    ticks = 1
-    actions = 50
+    partial = True
     for i in range(0, 10000):
         set_new_pose()
 
         ammo_boxes = []
-        while len(ammo_boxes) < max_ammo_boxes:
+        while len(ammo_boxes) <= max_ammo_boxes:
             new_box = create_new_box()
             add = True
             for box in ammo_boxes:
@@ -174,8 +171,8 @@ def game_loop():
                         break
             if add:        
                 mine_boxes.append(new_mine)
-
-        for j in range(0, actions * ticks):
+        actions = 50
+        for j in range(0, actions):
             reward_one = 0
             reward_two = 0
 
@@ -188,10 +185,12 @@ def game_loop():
             for box in mine_boxes:
                 box.render(gameDisplay)
 
+            drawWalls(gameDisplay)
             # convert screen to image for tensorflow
             game_image = pygame.surfarray.array3d(gameDisplay)
             game_image = game_image.swapaxes(0,1) 
             game_image = cv2.cvtColor(game_image,cv2.COLOR_RGB2BGR)
+
 
             for box in list(ammo_boxes):
                 if ship_one.checkCollision(box):
@@ -205,7 +204,19 @@ def game_loop():
                     mine_boxes.remove(box)
                     break
 
-            ship_one.tick(game_image, reward_one, (j == actions * ticks - 1) ,display_width, display_height)
+            train_image = game_image
+            if partial:
+                pose, limits = ship_one.getPose()
+                size = limits['size']
+                x = pose['x']
+                y = pose['y']
+
+                train_image = train_image[(y-size):(y + 2 *size), (x - size):(x + 2 * size)]
+
+                cv2.imshow('Partial: ', train_image)
+                cv2.waitKey(1)
+
+            ship_one.tick(train_image, reward_one, (j == actions - 1), [100, display_width - 100], [100, display_height - 100])
 
             pygame.display.update()
             # clock.tick(ticks)
