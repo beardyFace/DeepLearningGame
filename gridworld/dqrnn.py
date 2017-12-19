@@ -43,22 +43,22 @@ class Qnetwork():
         self.convFlat = tf.reshape(slim.flatten(self.conv4),[self.batch_size,self.trainLength,h_size])
         
         #Multi-RNN
-        # self.state_in = tf.placeholder(dtype=tf.float32, shape=[num_layers, 2, None, h_size])
+        self.state_in = tf.placeholder(dtype=tf.float32, shape=[num_layers, 2, None, h_size])
 
-        # self.state_per_layer_list = tf.unstack(self.state_in, axis=0)
+        self.state_per_layer_list = tf.unstack(self.state_in, axis=0)
 
-        # self.rnn_tuple_state = tuple(
-        #     [tf.nn.rnn_cell.LSTMStateTuple(self.state_per_layer_list[idx][0], self.state_per_layer_list[idx][1])
-        #      for idx in range(num_layers)]
-        # )
+        self.rnn_tuple_state = tuple(
+            [tf.nn.rnn_cell.LSTMStateTuple(self.state_per_layer_list[idx][0], self.state_per_layer_list[idx][1])
+             for idx in range(num_layers)]
+        )
         
-        # self.rnn, self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,cell=rnn_cell,dtype=tf.float32,initial_state=self.rnn_tuple_state,scope=myScope+'_rnn')
-        # self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
+        self.rnn, self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,cell=rnn_cell,dtype=tf.float32,initial_state=self.rnn_tuple_state,scope=myScope+'_rnn')
+        self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
 
         # RNN
-        self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
-        self.rnn,self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,cell=rnn_cell,dtype=tf.float32,initial_state=self.state_in,scope=myScope+'_rnn')        
-        self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
+        # self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
+        # self.rnn,self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,cell=rnn_cell,dtype=tf.float32,initial_state=self.state_in,scope=myScope+'_rnn')        
+        # self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
 
         #The output from the recurrent player is then split into separate Value and Advantage streams
         self.streamA,self.streamV = tf.split(self.rnn,2,1)
@@ -127,25 +127,24 @@ class DQRNLearner():
     PATH = "./drqn" #The path to save our model to.
     H_SIZE = 512 #The size of the final convolutional layer before splitting it into Advantage and Value streams.
     
-    NUM_LAYERS = 2
+    NUM_LAYERS = 4
     SAVE_EVERY_X_STEPS = 1000 #Number of epidoes to periodically save for analysis
     TAU = 0.001
 
     def __init__(self, scope, checkpoint_path="deep_qrnn_spaceshooter_networks", playback_mode=False, verbose_logging=False):
         tf.reset_default_graph()
         #We define the cells for the primary and target q-networks
-        # self.cell = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
-        # self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell] * DQRNLearner.NUM_LAYERS, state_is_tuple=True)
-
-        # self.cellT = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
-        # self.cellT = tf.nn.rnn_cell.MultiRNNCell([self.cellT] * DQRNLearner.NUM_LAYERS, state_is_tuple=True)
-
-        # self.state = np.zeros((DQRNLearner.NUM_LAYERS, 2, DQRNLearner.BATCH_SIZE, DQRNLearner.H_SIZE))
-
         self.cell = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
+        self.cell = tf.nn.rnn_cell.MultiRNNCell([self.cell] * DQRNLearner.NUM_LAYERS, state_is_tuple=True)
+
         self.cellT = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
-        
-        self.state = (np.zeros([1,DQRNLearner.H_SIZE]),np.zeros([1,DQRNLearner.H_SIZE])) #Reset the recurrent layer's hidden state
+        self.cellT = tf.nn.rnn_cell.MultiRNNCell([self.cellT] * DQRNLearner.NUM_LAYERS, state_is_tuple=True)
+
+        self.state = np.zeros((DQRNLearner.NUM_LAYERS, 2, 1, DQRNLearner.H_SIZE))
+
+        # self.cell = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
+        # self.cellT = tf.contrib.rnn.BasicLSTMCell(num_units=DQRNLearner.H_SIZE,state_is_tuple=True)
+        # self.state = (np.zeros([1,DQRNLearner.H_SIZE]),np.zeros([1,DQRNLearner.H_SIZE])) #Reset the recurrent layer's hidden state
 
         self.mainQN   = Qnetwork(DQRNLearner.H_SIZE,DQRNLearner.NUM_LAYERS,self.cell,scope+'_main')
         self.targetQN = Qnetwork(DQRNLearner.H_SIZE,DQRNLearner.NUM_LAYERS,self.cellT,scope+'_target')
@@ -211,8 +210,8 @@ class DQRNLearner():
             h_size = DQRNLearner.H_SIZE
 
             #Reset the recurrent layer's hidden state
-            self.state = (np.zeros([1,h_size]),np.zeros([1,h_size])) 
-            # self.state = np.zeros((DQRNLearner.NUM_LAYERS, 2, DQRNLearner.BATCH_SIZE, DQRNLearner.H_SIZE))
+            # self.state = (np.zeros([1,h_size]),np.zeros([1,h_size])) 
+            self.state = np.zeros((DQRNLearner.NUM_LAYERS, 2, 1, DQRNLearner.H_SIZE))
 
             self.last_action = None
             self.game_state = None
@@ -264,8 +263,8 @@ class DQRNLearner():
             if self.total_steps % (DQRNLearner.UPDATE_FREQ) == 0:
                 self.updateTarget(self.targetOps)
                 #Reset the recurrent layer's hidden state
-                state_train = (np.zeros([batch_size,h_size]),np.zeros([batch_size,h_size])) 
-                # state_train = np.zeros((DQRNLearner.NUM_LAYERS, 2, DQRNLearner.BATCH_SIZE, DQRNLearner.H_SIZE))
+                # state_train = (np.zeros([batch_size,h_size]),np.zeros([batch_size,h_size])) 
+                state_train = np.zeros((DQRNLearner.NUM_LAYERS, 2, DQRNLearner.BATCH_SIZE, DQRNLearner.H_SIZE))
 
                 trainBatch = self.myBuffer.sample(DQRNLearner.BATCH_SIZE,DQRNLearner.TRACE_LENGTH) #Get a random batch of experiences.
                 #Below we perform the Double-DQN update to the target Q-values
