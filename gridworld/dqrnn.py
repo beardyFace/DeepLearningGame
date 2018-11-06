@@ -41,7 +41,8 @@ class Qnetwork():
         #and then returned to [batch x units] when sent through the upper levles.
         self.batch_size = tf.placeholder(dtype=tf.int32,shape=[])
         self.convFlat = tf.reshape(slim.flatten(self.conv4),[self.batch_size,self.trainLength,h_size])
-        
+
+
         #Multi-RNN
         self.state_in = tf.placeholder(dtype=tf.float32, shape=[num_layers, 2, None, h_size])
 

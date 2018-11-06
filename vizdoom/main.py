@@ -1,3 +1,4 @@
+import os
 import threading
 import multiprocessing
 import numpy as np
@@ -6,12 +7,18 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import scipy.signal
 #%matplotlib inline
-from helper import *
 from vizdoom import *
 
 from random import choice
 from time import sleep
 from time import time
+
+#This code allows gifs to be saved of the training episode for use in the Control Center.
+def make_gif(images, fname):
+    import imageio
+    with imageio.get_writer(fname, mode='I') as writer:
+        for frame in images:
+            writer.append_data(frame)
 
 # Copies one set of variables to another.
 # Used to set worker network parameters to those of global network.
@@ -128,29 +135,10 @@ class Worker():
         self.update_local_ops = update_target_graph('global',self.name)        
         
         #The Below code is related to setting up the Doom environment
+        # game.set_doom_scenario_path("defend_the_center.wad") #This corresponds to the simple task we will pose our agent
+        # game.load_config("defend_the_center.cfg")
         game.set_doom_scenario_path("basic.wad") #This corresponds to the simple task we will pose our agent
         game.load_config("basic.cfg")
-
-        # game.set_doom_map("map01")
-        # game.set_screen_resolution(ScreenResolution.RES_160X120)
-        # game.set_screen_format(ScreenFormat.GRAY8)
-        # game.set_render_hud(False)
-        # game.set_render_crosshair(False)
-        # game.set_render_weapon(True)
-        # game.set_render_decals(False)
-        # game.set_render_particles(False)
-        # game.add_available_button(Button.MOVE_LEFT)
-        # game.add_available_button(Button.MOVE_RIGHT)
-        # game.add_available_button(Button.ATTACK)
-        # game.add_available_game_variable(GameVariable.AMMO2)
-        # game.add_available_game_variable(GameVariable.POSITION_X)
-        # game.add_available_game_variable(GameVariable.POSITION_Y)
-        # game.set_episode_timeout(300)
-        # game.set_episode_start_time(10)
-        # game.set_window_visible(True)
-        # game.set_sound_enabled(False)
-        # game.set_living_reward(-1)
-        # game.set_mode(Mode.PLAYER)
         
         game.init()
         self.actions = self.actions = np.identity(a_size,dtype=bool).tolist()
@@ -177,19 +165,22 @@ class Worker():
         # Update the global network using gradients from loss
         # Generate network statistics to periodically save
         feed_dict = {self.local_AC.target_v:discounted_rewards,
-            self.local_AC.inputs:np.vstack(observations),
-            self.local_AC.actions:actions,
-            self.local_AC.advantages:advantages,
-            self.local_AC.state_in[0]:self.batch_rnn_state[0],
-            self.local_AC.state_in[1]:self.batch_rnn_state[1]}
-        v_l,p_l,e_l,g_n,v_n, self.batch_rnn_state,_ = sess.run([self.local_AC.value_loss,
-            self.local_AC.policy_loss,
-            self.local_AC.entropy,
-            self.local_AC.grad_norms,
-            self.local_AC.var_norms,
-            self.local_AC.state_out,
-            self.local_AC.apply_grads],
-            feed_dict=feed_dict)
+                     self.local_AC.inputs:np.vstack(observations),
+                     self.local_AC.actions:actions,
+                     self.local_AC.advantages:advantages,
+                     self.local_AC.state_in[0]:self.batch_rnn_state[0],
+                     self.local_AC.state_in[1]:self.batch_rnn_state[1]}
+
+        v_l,p_l,e_l,loss,g_n,v_n,self.batch_rnn_state,_ = sess.run([self.local_AC.value_loss,
+                                                                    self.local_AC.policy_loss,
+                                                                    self.local_AC.entropy,
+                                                                    self.local_AC.loss,
+                                                                    self.local_AC.grad_norms,
+                                                                    self.local_AC.var_norms,
+                                                                    self.local_AC.state_out,
+                                                                    self.local_AC.apply_grads],
+                                                                    feed_dict=feed_dict)
+
         return v_l / len(rollout),p_l / len(rollout),e_l / len(rollout), g_n,v_n
         
     def work(self,max_episode_length,gamma,sess,coord,saver):
@@ -214,10 +205,14 @@ class Worker():
                 self.batch_rnn_state = rnn_state
                 while self.env.is_episode_finished() == False:
                     #Take an action using probabilities from policy network output.
-                    a_dist,v,rnn_state = sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out], 
-                        feed_dict={self.local_AC.inputs:[s],
-                        self.local_AC.state_in[0]:rnn_state[0],
-                        self.local_AC.state_in[1]:rnn_state[1]})
+                    a_dist,v,rnn_state = sess.run(
+                        [self.local_AC.policy,
+                         self.local_AC.value,
+                         self.local_AC.state_out], 
+                        feed_dict={
+                         self.local_AC.inputs:[s],
+                         self.local_AC.state_in[0]:rnn_state[0],
+                         self.local_AC.state_in[1]:rnn_state[1]})
                     a = np.random.choice(a_dist[0],p=a_dist[0])
                     a = np.argmax(a_dist == a)
 
@@ -267,8 +262,7 @@ class Worker():
                     if self.name == 'worker_0' and episode_count % 25 == 0:
                         time_per_step = 0.05
                         images = np.array(episode_frames)
-                        make_gif(images,'./frames/image'+str(episode_count)+'.gif',
-                            duration=len(images)*time_per_step,true_image=True,salience=False)
+                        make_gif(images,'./frames/image'+str(episode_count)+'.gif')
                     if episode_count % 250 == 0 and self.name == 'worker_0':
                         saver.save(sess,self.model_path+'/model-'+str(episode_count)+'.cptk')
                         print ("Saved Model")
@@ -276,6 +270,7 @@ class Worker():
                     mean_reward = np.mean(self.episode_rewards[-5:])
                     mean_length = np.mean(self.episode_lengths[-5:])
                     mean_value = np.mean(self.episode_mean_values[-5:])
+
                     summary = tf.Summary()
                     summary.value.add(tag='Perf/Reward', simple_value=float(mean_reward))
                     summary.value.add(tag='Perf/Length', simple_value=float(mean_length))
@@ -312,7 +307,7 @@ with tf.device("/cpu:0"):
     global_episodes = tf.Variable(0,dtype=tf.int32,name='global_episodes',trainable=False)
     trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
     master_network = AC_Network(s_size,a_size,'global',None) # Generate global network
-    num_workers = multiprocessing.cpu_count() # Set workers to number of available CPU threads
+    num_workers = 3#multiprocessing.cpu_count() # Set workers to number of available CPU threads
     workers = []
     # Create worker classes
     for i in range(num_workers):
